@@ -4,15 +4,38 @@ var express = require("express"),
 var app = express();
 let betObj = new Bet();
 
-betObj.logIN('bloody__barb', '890-890890');
+// betObj.logIN('bloody__barb', '890-890890');
 
 
 app.get("/", function (request, response) {
-  response.send(betObj.addresses.home.page);
+  // if (!betObj.config.auth) {
+  //   betObj.startMakeBet({
+  //     login: 'bloody__barb',
+  //     pass: '890-890890'
+  //   });
+  // }
+  betObj.getPage('home', () => response.send(betObj.addresses.home.page));
+  
 });
 
-app.get("/roulette", function (request, response) {
-  response.send(betObj.addresses.roulette.page);
+app.get("/start", function (request, response) {
+  betObj.startMakeBet({
+    login: 'bloody__barb',
+    pass: '890-890890'
+  });
+  response.send('startMakeBet');
+});
+
+app.get("/home(.php)?", function (request, response) {
+  betObj.getPage('home', () => response.send(betObj.addresses.home.page));
+});
+
+app.get("/roulette(.php)?", function (request, response) {
+  betObj.getPage('roulette', () => response.send(betObj.addresses.roulette.page));
+});
+
+app.get("/check", function (request, response) {
+  betObj.fullCheckWin();
 });
 
 app.get("/config", function (request, response) {
