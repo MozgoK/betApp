@@ -122,7 +122,7 @@ class Bet {
     this.getPage('roulette', () => {
 
       this.getParamForBet();
-      this.getLastGameID();
+      // this.getLastGameID();
 
       if (this.config.minutesForBet && this.config.goldForBet) {
 
@@ -190,6 +190,8 @@ class Bet {
       // Узнаем время и количество золота
       this.getTime(this.addresses[name].page);
       this.getGold(this.addresses[name].page);
+
+      if (name === 'roulette') this.getLastGameID();
 
       if (callback) callback(this.addresses[name].page);
 
