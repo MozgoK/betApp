@@ -116,6 +116,11 @@ class Bet {
     });
   }
 
+  logOUT() {
+    this.cookie = [];
+    this.config.auth = false;
+  }
+
 
   // Сделать ставку
   makeBet(bet, callback) {

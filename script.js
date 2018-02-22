@@ -27,7 +27,7 @@ server.get("/", function (req, res) {
 });
 
 server.get("/start/:number/:bet/:multiplier", function (req, res) {
-  if (!application.config.auth && !application.timer.on) {
+  if (!application.timer.on) {
     application.startMakeBet({
       login: 'bloody__barb',
       pass: '890-890890',
@@ -48,6 +48,12 @@ server.get("/start/:number/:bet/:multiplier", function (req, res) {
 server.get("/stop", function (req, res) {
   application.stopTimer(true);
   res.send('Таймер остановлен');
+});
+
+
+server.get("/logout", function (req, res) {
+  application.logOUT();
+  res.send('Куки очищены!');
 });
 
 
