@@ -6,6 +6,7 @@ const Bet = require('./Main');
 const server = express();
 const application = new Bet();
 
+const port = process.env.PORT || 8001;
 
 server.use(function (req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -94,7 +95,7 @@ server.get("/products/:productId", function (req, res) {
   response.send("productId: " + req.params["productId"])
 });
 
-server.listen(4200);
+server.listen(parseInt(port));
 
 
 setInterval(() => {
@@ -104,7 +105,7 @@ setInterval(() => {
 
 const abra = function() {
   setTimeout(() => {
-    request('https://bet-application.herokuapp.com/', function (error, response, body) {});
+    request('http://bet-application.herokuapp.com/', function (error, response, body) {});
     abra();
   }, 600000 + application.getRandomInt(100000, 300000));
 }
