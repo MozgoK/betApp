@@ -1,4 +1,7 @@
-var request = require('request'), iconv = require('iconv-lite');
+const request = require('request');
+const iconv = require('iconv-lite');
+
+
 class Bet {
   constructor() {
     this.headers = {
@@ -52,13 +55,14 @@ class Bet {
       goldForBet: /<input type=hidden name=cur_pl_bet value='(.+?)'>/,
       checkBet: /<center><b>Ваши ставки<\/b><\/center>\s*<table border=0 cellpadding=2 class=wb align=center>\s*<tr><td class=wblight width=50><b>Ставка<\/b><\/td>\s*<td class=wblight width=150><b>Поле<\/b><\/td><\/tr>\s*<tr><td class=wblight align=right>(.+?)<\/td><td class=wblight>Straight up (.+?)<\/td>/,
       checkWin: /<div align=center><u>Выпало число <font color='(?:.+?)'><b>(.+?)<\/b><\/font><\/u><\/div><br>/,
-      lastGame: /<a href='inforoul\.php\?id=(.+?)'>Прошлая игра<\/a><br><\/div>/
+      lastGame: /<a href='inforoul\.php\?id=(.+?)'>Прошлая игра<\/a><br><\/div>/,
+      checkWinningGold: /Выигрыш<\/b><\/td>\s*<\/tr>\s*<tr><td class=wblight align=right><b>(?:.+?)<\/b><\/td><td class=wblight><a style='text-decoration:none;' href='pl_info\.php\?id=(?:.+?)'>(?:.+?)<\/a><\/td><td class=wblight>(?:.+?)<\/td><td class=wblight><b>(.+?)<\/b>/
 
     };
 
     this.config = {
-      NUMBER: 33,
-      multiplier: 1.037,
+      NUMBER: null,
+      multiplier: null,
       rate: null,
       auth: false,
       win: false
@@ -69,15 +73,19 @@ class Bet {
 
     this.timer = {
       id: null,
-      on: false
+      on: false,
+      needS: 0,
+      seconds: 0,
+      minutes: 0
     }
 
   }
 
 
   // Авторизация
-  logIN(login, pass) {
+  logIN(login, pass, bet, callback) {
     this.users[login] = pass;
+    this.log = [];
 
     request.post({
       url: this.addresses.login,
@@ -95,15 +103,14 @@ class Bet {
         return;
       }
 
-      if (httpResponse.headers['set-cookie']) {
-        this.searchCookie(httpResponse.headers['set-cookie']);
-      }
+      this.searchCookie(httpResponse.headers);
 
-      // this.headers['Content-Type'] = 'text/html';
       this.getPage('home', (page) => {
 
         // Сделать ставку на 100
-        // this.makeBet(100);
+        if (bet && callback) this.makeBet(bet, callback);
+
+        // if (callback) callback(page);
 
       });
     });
@@ -111,7 +118,7 @@ class Bet {
 
 
   // Сделать ставку
-  makeBet(bet) {
+  makeBet(bet, callback) {
     this.getPage('roulette', () => {
 
       this.getParamForBet();
@@ -126,7 +133,8 @@ class Bet {
 
         if (this.config.rate > this.config.gold) {
           // Золота не хватает
-          this.log.push({ time: new Date(), bet: 'золото закончилось' });
+          this.log.push({ time: this.getNowDate(), bet: 'золото закончилось' });
+          this.logging('золото закончилось');
           return;
         }
 
@@ -146,11 +154,15 @@ class Bet {
             return;
           }
 
-          if (httpResponse.headers['set-cookie']) {
-            this.searchCookie(httpResponse.headers['set-cookie']);
-          }
+          this.searchCookie(httpResponse.headers);
 
-          this.getPage('roulette', () => this.checkBet(this.config.rate));
+          this.getPage('roulette', () => {
+
+            let result = this.checkBet(this.config.rate);
+            if (callback) callback(result);
+
+          });
+
         });
       } else {
         console.error('Нельзя поставить (скорей всего не подходит вермя)');
@@ -171,9 +183,7 @@ class Bet {
         return;
       }
 
-      if (httpResponse.headers['set-cookie']) {
-        this.searchCookie(httpResponse.headers['set-cookie']);
-      }
+      this.searchCookie(httpResponse.headers);
 
       this.addresses[name].page = iconv.decode(body, 'win1251');
 
@@ -193,7 +203,7 @@ class Bet {
         hour: +temp[1],
         minute: +temp[2]
       };
-      console.log(this.config.time);
+      // console.log(this.config.time);
     } else {
       console.error('Не нашел время!');
     }
@@ -202,8 +212,13 @@ class Bet {
   getGold(page) {
     let temp = page.match(this.reg.gold);
     if (temp) {
-      this.config.gold = +temp[1].replace(/,/g, '');
-      console.log('Gold: ' + this.config.gold);
+      let newGold = +temp[1].replace(/,/g, '');
+
+      if (this.config.gold !== newGold) {
+        this.config.gold = newGold;
+        this.logging('gold ' + this.config.gold);
+      }
+
     } else {
       console.error('Не нашел золото!');
       console.error('Выкинуло!');
@@ -222,7 +237,7 @@ class Bet {
     let temp = page.match(this.reg[name]);
     if (temp) {
       this.config[name] = temp[1];
-      console.log(name + ': ' + this.config[name]);
+      // console.log(name + ': ' + this.config[name]);
     } else {
       this.config[name] = null;
       console.error(name + ' not found!');
@@ -231,26 +246,38 @@ class Bet {
 
   checkBet(bet) {
     let temp = this.addresses.roulette.page.match(this.reg.checkBet);
-    if (temp && temp[1] === '' + bet && temp[2] === '' + this.config.NUMBER) {
-      this.log.push({ time: new Date(), bet: temp[1] });
-      console.log('Поставлено ' + temp[1] + ' на ' + temp[2]);
+    if (temp && temp[1] === '' + bet && temp[2] === this.config.NUMBER.toString()) {
+      this.log.push({ time: this.getNowDate(), bet: temp[1] });
+      this.logging('Поставлено ' + temp[1] + ' на ' + temp[2]);
 
       // ЗАПУСКАЕМ ТАЙМЕР
+      this.startTimer();
+      return true;
 
     } else {
       console.error('Не поставлено');
       this.errorHandler('notMakeBet');
+      return false;
     }
   }
 
   checkWin() {
     let temp = this.addresses.inforoul.page.match(this.reg.checkWin);
     if (temp && temp[1] === this.config.NUMBER.toString()) {
-      console.log('Победа');
+      this.logging(' — ПОБЕДА! —');
       return true;
     } else {
-      console.error('Не выпало!');
+      this.logging(' — Не выпало! —');
       return false;
+    }
+  }
+
+  checkWinningGold() {
+    let temp = this.addresses.inforoul.page.match(this.reg.checkWinningGold);
+    if (temp) {
+      this.log[this.log.length - 1].winGold = temp[1];
+    } else {
+      console.error('Не нашел выигрыш!');
     }
   }
 
@@ -269,6 +296,7 @@ class Bet {
 
       this.getPage('inforoul', () => {
         this.config.win = this.checkWin();
+        this.checkWinningGold();
 
         if (!this.config.win) {
           // Не выиграли -> продолжаем ставить
@@ -287,80 +315,100 @@ class Bet {
 
 
   startMakeBet(obj) {
-    this.logIN(obj.login, obj.pass);
+    this.config.NUMBER = obj.number;
+    this.config.multiplier = obj.multiplier;
+    this.logIN(obj.login, obj.pass, obj.bet, obj.callback);
   }
 
-  // get(url, cookie, obj, name) {
-  //   let result;
-  //   request.get({
-  //     url,
-  //     encoding: 'utf8',
-  //     headers: Object.assign({ 'Cookie': cookie ? cookie.join(';') : '' }, this.headers, { 'Content-Type': 'text/html' })
-  //   }, function (err, httpResponse, body) {
-  //     if (err) {
-  //       console.log('Error :' + err);
-  //       return;
-  //     }
+  searchCookie(headers) {
+    if (headers['set-cookie']) {
+      let header = headers['set-cookie'];
 
-  //     if (httpResponse.headers['set-cookie']) {
-  //       this.searchCookie(httpResponse.headers['set-cookie']);
-  //     }
-
-  //     console.log('GET: ' + url);
-  //     console.log('Headers: ' + httpResponse.headers);
-  //     console.log('Status: ' + httpResponse.statusCode);
-  //     console.log(body);
-  //     obj[name] = body;
-  //   });
-  // }
-
-  // post(url, cookie, form) {
-  //   let result;
-  //   request.post({
-  //     url,
-  //     form,
-  //     headers: Object.assign({ 'Cookie': cookie ? cookie.join(';') : '' }, this.headers)
-  //   }, (err, httpResponse, body) => {
-  //     if (err) {
-  //       console.log('Error :' + err);
-  //       return;
-  //     }
-
-  //     if (httpResponse.headers['set-cookie']) {
-  //       this.searchCookie(httpResponse.headers['set-cookie']);
-  //     }
-
-  //     result = body;
-  //   });
-  //   return result;
-  // }
-
-  searchCookie(header) {
-    this.cookie = [];
-    header.forEach((el) => {
-      if (el.indexOf('deleted') === -1) {
-        let temp;
-        if (el.indexOf(';') === -1) {
-          temp = el;
-        } else {
-          temp = el.split(';')[0];
+      this.cookie = [];
+      header.forEach((el) => {
+        if (el.indexOf('deleted') === -1) {
+          let temp;
+          if (el.indexOf(';') === -1) {
+            temp = el;
+          } else {
+            temp = el.split(';')[0];
+          }
+          this.cookie.push(temp);
         }
-        this.cookie.push(temp);
-      }
-    });
-    console.log('New coockie: ' + this.cookie.join(';'));
+      });
+      this.logging('new coockie: ' + this.cookie.join(';'));
+    }
   }
 
-  // async getPage(name, id = '') {
-  //   this.get(this.addresses[name].url + id, this.cookie, this.addresses[name], 'page');
-  // }
+  getNowDate() {
+    return new Date((new Date).toString().replace(/GMT\+0000/, 'GMT+0300'));
+  }
 
-  // login(name, pass) {
-  //   let temp = this.post(this.addresses.login, null, this.form);
-  //   this.getPage('home');
 
-  //   this.loginFlag = true; //Проверка 
-  // }
+  // Функция старта таймера
+  startTimer() {
+    if (!this.config.time) {
+      console.error('Нету времени!');
+      return;
+    }
+
+    if (this.timer.on) {
+      console.error('Таймер уже включен');
+      return;
+    }
+    
+    const minutes = +this.config.time.minute,
+      seconds = this.getRandomInt(5, 30),
+      remainderOfDivision = minutes % 10;
+
+    this.timer.needS = (12 - remainderOfDivision) * 60 + seconds;
+    this.timer.on = true;
+
+    this.timer.id = setInterval(() => {
+      this.timer.needS--;
+      this.timerFunc(this.timer.needS);
+    }, 1000);
+  }
+
+  // Фунция проверки и завершения таймера
+  timerFunc(seconds) {
+    if (seconds >= 0) {
+      this.timer.seconds = seconds % 60;
+      this.timer.minutes = Math.floor(seconds / 60);
+
+    } else {
+      this.stopTimer();
+
+      // Делаем проверку
+      this.fullCheckWin();
+    }
+  }
+
+  stopTimer(flag) {
+    clearInterval(this.timer.id);
+    this.timer.needS = 0;
+    this.timer.on = false;
+    this.timer.seconds = 0;
+    this.timer.minutes = 0;
+    if (flag) this.logging('timer disabled');
+  }
+
+  getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min)) + min;
+  }
+
+  logging(text) {
+    if (this.config.time) {
+      console.log(`${this.pipeTime(this.config.time.hour)}:${this.pipeTime(this.config.time.minute)} ~ ${text}`);
+    } else console.log(` ~ ${text}`);
+  }
+
+  pipeTime(num) {
+    let temp = num.toString();
+    return num.toString().length === 1
+      ? '0' + temp
+      : temp;
+  }
 
 }
 

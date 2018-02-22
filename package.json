@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "name": "betApp",
+  "description": "Application for bet",
+  "main": "script.js",
+  "dependencies": {
+    "body-parser": "^1.17.1",
+    "express": "^4.15.2",
+    "https": "^1.0.0",
+    "iconv-lite": "^0.4.19",
+    "request": "^2.83.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "node script.js"
+  }
+}
